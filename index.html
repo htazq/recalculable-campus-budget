@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>可复算活动预算表</title>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--border:#dfe2e6;--primary:#2563eb;--primary-h:#1d4ed8;--danger:#dc2626;--danger-h:#b91c1c;--text:#1f2937;--muted:#6b7280;--err-bg:#fef2f2;--err-bd:#fca5a5;--cat-bg:#f0f4ff;--grand-bg:#ecfdf5}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:12px}
+.container{max-width:960px;margin:0 auto}
+header{text-align:center;padding:20px 0 16px}
+header h1{font-size:1.5rem;font-weight:700}
+header p{color:var(--muted);font-size:.85rem;margin-top:4px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.toolbar-l,.toolbar-r{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{cursor:pointer;border:none;border-radius:6px;padding:8px 16px;font-size:.875rem;font-weight:500;transition:background .15s}
+.btn-p{background:var(--primary);color:#fff}.btn-p:hover{background:var(--primary-h)}
+.btn-d{background:var(--danger);color:#fff}.btn-d:hover{background:var(--danger-h)}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-o:hover{background:#f3f4f6}
+.tw{background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+thead th{background:#f9fafb;text-align:left;padding:10px 8px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:6px 8px;border-bottom:1px solid #f3f4f6}
+tbody tr:last-child td{border-bottom:none}
+td input,td select{width:100%;border:1px solid transparent;border-radius:4px;padding:6px 8px;font-size:.875rem;background:#f9fafb;transition:border .15s,background .15s}
+td input:focus,td select:focus{outline:none;border-color:var(--primary);background:#fff}
+td input.err,td select.err{border-color:var(--danger);background:var(--err-bg)}
+.cn{min-width:120px}.cc{min-width:100px}.cq{width:80px;text-align:right}.cp{width:100px;text-align:right}.cs{width:100px;text-align:right;font-weight:600}.ca{width:60px;text-align:center}
+.sc{text-align:right;font-weight:600}
+tr.cat-st td{background:var(--cat-bg);font-weight:600;font-size:.8rem;color:var(--muted)}
+.summary{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px}
+.sr{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:.9rem}
+.sr.grand{background:var(--grand-bg);border-radius:6px;padding:10px 12px;margin-top:8px;font-size:1.1rem;font-weight:700}
+.sl{color:var(--muted)}.sv{font-weight:600;font-variant-numeric:tabular-nums}
+.rc{display:flex;align-items:center;gap:8px}
+.rc input{width:70px;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:.875rem;text-align:right}
+.rc input.err{border-color:var(--danger);background:var(--err-bg)}
+.rc span{color:var(--muted);font-size:.8rem}
+.eb{background:var(--err-bg);border:1px solid var(--err-bd);border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:.8rem;color:var(--danger);display:none}
+.eb.show{display:block}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:8px 20px;border-radius:6px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100}
+.toast.show{opacity:1}
+.fn{text-align:center;color:var(--muted);font-size:.75rem;margin-top:16px;padding:8px}
+@media(max-width:600px){header h1{font-size:1.2rem}.cn{min-width:90px}td input,td select{font-size:.8rem;padding:5px 6px}.sr{font-size:.85rem}}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>&#128202; 可复算活动预算表</h1><p>学生社团校园活动预算管理 · 自动计算 · 本地保存 · 可导出复算</p></header>
+<div id="errBanner" class="eb"></div>
+<div class="toolbar">
+<div class="toolbar-l">
+<button class="btn-p" onclick="addRow()">&#10133; 新增明细</button>
+<button class="btn-o" onclick="loadSample()">&#128203; 载入示例</button>
+<button class="btn-o" onclick="clearAll()">&#128465; 清空</button>
+</div>
+<div class="toolbar-r">
+<button class="btn-o" onclick="exportCSV()">&#11015; 导出可复算 CSV</button>
+</div>
+</div>
+<div class="tw"><table id="budgetTable"><thead><tr><th class="cn">名称</th><th class="cc">分类</th><th class="cq">数量</th><th class="cp">单价(元)</th><th class="cs">小计(元)</th><th class="ca">操作</th></tr></thead><tbody id="tbody"></tbody></table></div>
+<div class="summary">
+<div id="categorySummary"></div>
+<div class="sr"><span class="sl">基础合计（所有明细之和）</span><span class="sv" id="baseTotal">&yen;0.00</span></div>
+<div class="sr"><span class="sl">备用金配置</span><div class="rc"><input type="number" id="reserveRatio" value="10" min="0" max="100" step="0.1" oninput="onReserveChange()"/><span>% &times; 基础合计</span></div></div>
+<div class="sr"><span class="sl">备用金金额</span><span class="sv" id="reserveAmt">&yen;0.00</span></div>
+<div class="sr grand"><span>预算总额</span><span id="grandTotal">&yen;0.00</span></div>
+</div>
+<div class="fn">数据自动保存在浏览器本地（localStorage），关闭后重新打开可恢复。<br>导出的 CSV 含 Excel 公式，用 Excel / WPS / LibreOffice 打开后需按 F9 或 Ctrl+Shift+F9 重新计算公式。</div>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+"use strict";
+var CATS=["餐饮","场地","宣传","物资","交通","礼品","其他"];
+var SAMPLE=[
+{name:"社团招新午餐",category:"餐饮",qty:30,price:25},
+{name:"活动场地租赁",category:"场地",qty:1,price:500},
+{name:"宣传海报打印",category:"宣传",qty:50,price:3},
+{name:"横幅制作",category:"宣传",qty:2,price:40},
+{name:"桌椅租借",category:"物资",qty:20,price:5},
+{name:"嘉宾交通补贴",category:"交通",qty:3,price:50},
+{name:"参与纪念品",category:"礼品",qty:50,price:8}
+];
+var rows=[],nextId=1,reserveRatio=10;
+function fmt(n){if(typeof n!=="number"||!isFinite(n))n=0;return"¥"+n.toFixed(2)}
+function fp(n){if(typeof n!=="number"||!isFinite(n))n=0;return n.toFixed(2)}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
+function banner(m){var b=document.getElementById("errBanner");if(m){b.textContent=m;b.classList.add("show")}else{b.classList.remove("show")}}
+function pQty(v){var n=Number(v);if(String(v).trim()===""||!isFinite(n))return{ok:false,msg:"请输入有效数字"};if(n<0)return{ok:false,msg:"数量不能为负"};return{ok:true,val:n}}
+function pPrice(v){var n=Number(v);if(String(v).trim()===""||!isFinite(n))return{ok:false,msg:"请输入有效数字"};if(n<0)return{ok:false,msg:"单价不能为负"};return{ok:true,val:n}}
+function addRow(d){rows.push({id:nextId++,name:(d&&d.name)?d.name:"",category:(d&&d.category)?d.category:CATS[0],qty:(d&&typeof d.qty==="number")?d.qty:0,price:(d&&typeof d.price==="number")?d.price:0});render();save()}
+function delRow(id){rows=rows.filter(function(r){return r.id!==id});render();save()}
+function updRow(id,f,v){for(var i=0;i<rows.length;i++){if(rows[i].id===id){if(f==="qty"||f==="price"){var p=(f==="qty")?pQty(v):pPrice(v);if(p.ok){rows[i][f]=p.val;var inp=document.querySelector('[data-id="'+id+'"][data-field="'+f+'"]');if(inp)inp.classList.remove("err")}else{rows[i][f]=NaN;var inp2=document.querySelector('[data-id="'+id+'"][data-field="'+f+'"]');if(inp2)inp2.classList.add("err")}var sub=document.querySelector('[data-id="'+id+'"][data-subtotal]');if(sub)sub.textContent=fp(rowSub(rows[i]))}else{rows[i][f]=v}break}}renderSummary();save()}
+function rowSub(r){var q=(typeof r.qty==="number"&&!isNaN(r.qty))?r.qty:0;var p=(typeof r.price==="number"&&!isNaN(r.price))?r.price:0;return q*p}
+function hasErr(){for(var i=0;i<rows.length;i++){if((typeof rows[i].qty==="number"&&isNaN(rows[i].qty))||(typeof rows[i].price==="number"&&isNaN(rows[i].price)))return true}return false}
+function render(){var tb=document.getElementById("tbody");tb.innerHTML="";if(rows.length===0){var tr=document.createElement("tr");tr.innerHTML='<td colspan="6" style="text-align:center;color:#9ca3af;padding:24px;">暂无预算明细，点击「新增明细」开始添加</td>';tb.appendChild(tr);renderSummary();return}
+for(var i=0;i<rows.length;i++){var r=rows[i];var sub=rowSub(r);var tr=document.createElement("tr");
+var qv=(typeof r.qty==="number"&&!isNaN(r.qty))?r.qty:"";var qe=(typeof r.qty==="number"&&isNaN(r.qty))?" err":"";
+var pv=(typeof r.price==="number"&&!isNaN(r.price))?r.price:"";var pe=(typeof r.price==="number"&&isNaN(r.price))?" err":"";
+var opts=CATS.map(function(c){return'<option value="'+esc(c)+'"'+(c===r.category?" selected":"")+">"+esc(c)+"</option>"}).join("");
+tr.innerHTML='<td><input type="text" class="cn" data-id="'+r.id+'" data-field="name" value="'+esc(r.name)+'" placeholder="明细名称"></td>'+
+'<td><select data-id="'+r.id+'" data-field="category">'+opts+'</select></td>'+
+'<td><input type="number" class="cq'+qe+'" data-id="'+r.id+'" data-field="qty" value="'+qv+'" min="0" step="1"></td>'+
+'<td><input type="number" class="cp'+pe+'" data-id="'+r.id+'" data-field="price" value="'+pv+'" min="0" step="0.01"></td>'+
+'<td class="sc" data-id="'+r.id+'" data-subtotal>'+fp(sub)+'</td>'+
+'<td class="ca"><button class="btn-d" style="padding:4px 8px;font-size:.75rem" onclick="delRow('+r.id+')">删除</button></td>';
+tb.appendChild(tr)}
+bindInputs();renderSummary()}
+function bindInputs(){var els=document.querySelectorAll("[data-id][data-field]");for(var i=0;i<els.length;i++){(function(el){var id=parseInt(el.getAttribute("data-id")),f=el.getAttribute("data-field");if(el.tagName==="SELECT"){el.onchange=function(){updRow(id,f,el.value)}}else{el.oninput=function(){updRow(id,f,el.value)}}})(els[i])}}
+function renderSummary(){var base=0;var cats={};for(var i=0;i<rows.length;i++){var s=rowSub(rows[i]);base+=s;if(!cats[rows[i].category])cats[rows[i].category]=0;cats[rows[i].category]+=s}
+var rr=parseFloat(document.getElementById("reserveRatio").value);if(isNaN(rr)||rr<0){rr=0;document.getElementById("reserveRatio").classList.add("err")}else if(rr>100){rr=100;document.getElementById("reserveRatio").classList.add("err")}else{document.getElementById("reserveRatio").classList.remove("err")}
+reserveRatio=rr;var reserve=base*rr/100;var grand=base+reserve;
+document.getElementById("categorySummary").innerHTML=CATS.filter(function(c){return Object.prototype.hasOwnProperty.call(cats,c)}).map(function(c){return '<div class="sr"><span class="sl">'+esc(c)+'小计</span><span class="sv">'+fmt(cats[c])+'</span></div>'}).join("");
+document.getElementById("baseTotal").textContent=fmt(base);document.getElementById("reserveAmt").textContent=fmt(reserve);document.getElementById("grandTotal").textContent=fmt(grand);
+if(hasErr()){banner("存在无效输入（负数或非数字），对应单元格已标红，请修正后再导出。")}else{banner("")}}
+function onReserveChange(){renderSummary();save()}
+function save(){try{var data={rows:rows.map(function(r){return{id:r.id,name:r.name,category:r.category,qty:r.qty,price:r.price}}),nextId:nextId,reserveRatio:reserveRatio};localStorage.setItem("budgetTableData",JSON.stringify(data))}catch(e){}}
+function restore(){try{var s=localStorage.getItem("budgetTableData");if(!s)return false;var d=JSON.parse(s);if(!d||!Array.isArray(d.rows))return false;rows=d.rows.map(function(r){return{id:r.id||nextId++,name:r.name||"",category:r.category||CATS[0],qty:(typeof r.qty==="number")?r.qty:(r.qty===null?NaN:0),price:(typeof r.price==="number")?r.price:(r.price===null?NaN:0)}});nextId=d.nextId||((rows.length>0)?Math.max.apply(null,rows.map(function(r){return r.id}))+1:1);reserveRatio=(typeof d.reserveRatio==="number")?d.reserveRatio:10;var ri=document.getElementById("reserveRatio");if(ri)ri.value=reserveRatio;return true}catch(e){return false}}
+function loadSample(){rows=[];nextId=1;for(var i=0;i<SAMPLE.length;i++){rows.push({id:nextId++,name:SAMPLE[i].name,category:SAMPLE[i].category,qty:SAMPLE[i].qty,price:SAMPLE[i].price})}render();save();toast("已载入示例数据")}
+function clearAll(){if(rows.length===0){toast("已经是空的");return}if(!confirm("确定清空所有预算明细？此操作不可撤销。"))return;rows=[];render();save();toast("已清空")}
+function exportCSV(){if(rows.length===0){toast("没有数据可导出");return}if(hasErr()){banner("存在无效输入，请先修正标红的单元格再导出。");toast("请先修正无效输入");return}
+var lines=[];lines.push("名称,分类,数量,单价(元),小计(元)");
+var rowIdx=2;var catRows={};
+for(var i=0;i<rows.length;i++){var r=rows[i];var q=(typeof r.qty==="number"&&!isNaN(r.qty))?r.qty:0;var p=(typeof r.price==="number"&&!isNaN(r.price))?r.price:0;
+lines.push(csvCell(r.name)+","+csvCell(r.category)+","+q+","+p.toFixed(2)+",=C"+rowIdx+"*D"+rowIdx);if(!catRows[r.category])catRows[r.category]=[];catRows[r.category].push(rowIdx);rowIdx++}
+lines.push("");lines.push("=== 分类小计 ===");
+for(var cat in catRows){if(Object.prototype.hasOwnProperty.call(catRows,cat)){lines.push(csvCell(cat+"小计")+",,,,="+catRows[cat].map(function(n){return "E"+n}).join("+"))}}
+lines.push("");var baseRow=lines.length+1;lines.push("基础合计,,,,=SUM(E2:E"+(rowIdx-1)+")");
+var ratioRow=lines.length+1;lines.push("备用金比例(%),,,,"+reserveRatio);
+var reserveRow=lines.length+1;lines.push("备用金金额,,,,=E"+ratioRow+"/100*E"+baseRow);
+lines.push("预算总额,,,,=E"+baseRow+"+E"+reserveRow);
+lines.push("");lines.push("提示: 本CSV含Excel公式，打开后请按 F9 (Excel) 或 Ctrl+Shift+F9 重新计算。");
+var csv=lines.join("\r\n");var bom="\uFEFF";var blob=new Blob([bom+csv],{type:"text/csv;charset=utf-8"});
+var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="活动预算表_"+new Date().toISOString().slice(0,10)+".csv";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);toast("CSV已导出，请用Excel/WPS打开后按F9复算")}
+function csvCell(s){s=String(s||"");if(/^[\s]*[=+\-@]/.test(s))s="'"+s;if(/[",\n\r]/.test(s)){s='"'+s.replace(/"/g,'""')+'"'}return s}
+function init(){if(!restore()){loadSample()}else{render()}}
+init();
+</script>
+</body>
+</html>
